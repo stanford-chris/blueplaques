@@ -312,7 +312,7 @@ def compose(plaque, pick):
     parts = []
     address = details.get('address')
     if address:
-        parts.append(('text', address + '\n', None))
+        parts.append(('text', curl_quotes(address) + '\n', None))
     line = scheme_line(details, rim_scheme)
     if line:
         parts.append(('text', curl_quotes(line) + '\n', None))
@@ -326,7 +326,7 @@ def compose(plaque, pick):
         parts.append(('link', '📍 Map', f'https://www.google.com/maps?q={lat},{lon}'))
         parts.append(('text', '\n', None))
     parts.append(('text', '\nPhoto: ', None))
-    parts.append(('link', credit_name(photo['artist']), photo['page']))
+    parts.append(('link', curl_quotes(credit_name(photo['artist'])), photo['page']))
     parts.append(('text', f', {photo["licence"]}\n', None))
     tags = ['BluePlaques', 'London']
     if plaque.get('borough'):

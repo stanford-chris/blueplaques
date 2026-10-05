@@ -148,6 +148,14 @@ class Post(unittest.TestCase):
         self.assertEqual(links[1], ('Spudgun67', 'https://commons.wikimedia.org/wiki/File:X.jpg'))
         self.assertEqual([u for k, t, u in parts if k == 'tag'], ['BluePlaques', 'London', 'KensingtonAndChelsea'])
 
+    def test_address_and_credit_are_curled(self):
+        p = plaque("Blue plaque erected in 1990 by English Heritage at 3 St Mary's Road, London W5 5RA",
+                   artist="Pat O'Brien")
+        text = P.render(P.compose(p, pick()))
+        self.assertIn('3 St Mary’s Road, W5 5RA', text)
+        self.assertIn('Photo: Pat O’Brien, ', text)
+        self.assertNotIn("'", text)
+
     def test_no_borough_no_third_tag(self):
         parts = P.compose(plaque(CUBITT_DESC, borough=None), pick())
         self.assertEqual([u for k, t, u in parts if k == 'tag'], ['BluePlaques', 'London'])
