@@ -159,6 +159,17 @@ def main():
             if skipped >= SKIP_LIMIT:
                 sys.exit(f'NOT POSTED: {SKIP_LIMIT} plaques passed over in a row')
             continue
+        # No card, no post (his rule, 6 October 2026). The plaque is NOT passed
+        # over for good: it keeps its place and goes out once a card exists,
+        # from the matcher or from manual_sources.json.
+        cards = subject_cards(plaque, pick, title)
+        if not cards:
+            why = 'card lookup could not be made' if cards is None else 'no source yet (manual_sources.json)'
+            print(f'waiting: {title[9:]} ({why})')
+            skipped += 1
+            if skipped >= SKIP_LIMIT:
+                sys.exit(f'NOT POSTED: {SKIP_LIMIT} plaques in a row had no card')
+            continue
         break
     else:
         print('Nothing left to post: every plaque has been through.')
@@ -171,7 +182,6 @@ def main():
     print(f'[alt] {alt}')
     print(f'[photo] {pick["file"]}')
     print(f'[plaque] {title}')
-    cards = subject_cards(plaque, pick, title)
     for c in cards or []:
         print(f'[reply card] {c["title"]} | {c["description"]} | {c["url"]} | '
               f'{"Commons thumbnail" if c["thumb"] else "no image"}')
@@ -203,10 +213,19 @@ def main():
             sys.exit(f'Plaque posted, but a reply card failed: {type(exc).__name__}: {exc}')
 
 
+MANUAL_SOURCES = Path(__file__).resolve().parent / 'manual_sources.json'
+
+
 def subject_cards(plaque, pick, title):
-    """Cards for the plaque's subjects, cached per plaque. None = the lookup
-    could not be made this time (not cached, so the next run tries again)."""
+    """Cards for the plaque's subjects. A plaque in manual_sources.json (links
+    he found by hand) uses those and nothing else; otherwise the matcher's
+    answer, cached per plaque. None = the lookup could not be made this time
+    (not cached, so the next run tries again)."""
     import subjects
+    manual = load_json(MANUAL_SOURCES, {}).get(title)
+    if manual:
+        cards = [subjects.card_for_url(u) for u in manual]
+        return None if any(c is None for c in cards) else cards
     cache = load_json(SUBJECTS_FILE, {})
     if title in cache:
         return cache[title]

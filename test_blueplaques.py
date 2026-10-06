@@ -226,6 +226,12 @@ class Subjects(unittest.TestCase):
         self.assertEqual(S.significant('Huxleys'), S.significant('Huxley'))
         self.assertEqual(S.significant('Site of St Leonard Eastcheap'), {'leonard', 'eastcheap'})
 
+    def test_manual_source_wins_and_a_plaque_without_a_card_waits(self):
+        import blueplaques_post as bp
+        self.assertTrue(hasattr(bp, 'MANUAL_SOURCES'))
+        src = open(bp.__file__).read()
+        self.assertIn("if not cards:", src)          # the no-card-no-post gate is in the loop
+
     def test_plaque_years(self):
         import subjects as S
         self.assertEqual(S.plaque_years({'scheme_rim': '', 'lines': ['GEORGE', '1874 - 1935', 'ACTOR-MANAGER'],

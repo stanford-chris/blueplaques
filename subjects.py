@@ -197,6 +197,39 @@ def card(title):
             'description': desc, 'thumb': commons_thumb}
 
 
+def card_for_url(url):
+    """A card for a link he chose. A Wikipedia article gets Wikipedia's own
+    summary and, by the same Commons-only rule, its image. Any other page
+    gets its own og:title and og:description and NO image: another site's
+    picture carries no licence this account can check. None if the page
+    cannot be read now (not a verdict; the next run tries again)."""
+    m = re.match(r'https?://en\.(?:m\.)?wikipedia\.org/wiki/([^?#]+)', url)
+    if m:
+        return card(urllib.parse.unquote(m.group(1)).replace('_', ' '))
+    import subprocess, html as _h
+    r = subprocess.run(['curl', '-sL', '-A', 'Mozilla/5.0 (compatible; blueplaques-bot/0.1)',
+                        '--max-time', '30', url], capture_output=True, text=True, errors='ignore')
+    if r.returncode != 0 or not r.stdout:
+        return None
+    page = r.stdout
+
+    def meta(prop):
+        for pat in (rf'<meta[^>]+(?:property|name)=["\']{prop}["\'][^>]+content=["\']([^"\']*)',
+                    rf'<meta[^>]+content=["\']([^"\']*)["\'][^>]+(?:property|name)=["\']{prop}["\']'):
+            mm = re.search(pat, page, re.I)
+            if mm:
+                return _h.unescape(mm.group(1)).strip()
+        return ''
+    title = meta('og:title')
+    if not title:
+        tm = re.search(r'<title[^>]*>(.*?)</title>', page, re.I | re.S)
+        title = _h.unescape(tm.group(1)).strip() if tm else url
+    desc = meta('og:description') or meta('description')
+    if len(desc) > 300:
+        desc = desc[:300].rsplit(' ', 1)[0].rstrip(',.;:') + '…'
+    return {'url': url, 'title': title[:300], 'description': desc, 'thumb': None}
+
+
 def find(plaque, pick):
     """Up to MAX_SUBJECTS cards, people first. None when a lookup could not
     be made (so the caller can retry later); [] when there is honestly no
