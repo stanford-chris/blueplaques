@@ -34,7 +34,7 @@ MAX_IMAGE_BYTES = 950_000
 SKIP_LIMIT = 25                  # plaques passed over in one run before giving up
 # Wikipedia link-card replies under each post (subjects.py), built 6 October
 # 2026 and held OFF until he has seen real ones: dry runs show them either way.
-REPLY_CARDS = False
+REPLY_CARDS = True
 SUBJECTS_FILE = Path(__file__).resolve().parent / 'data' / 'subjects.json'
 
 
