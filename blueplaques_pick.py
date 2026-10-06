@@ -39,7 +39,7 @@ import urllib.parse
 from pathlib import Path
 
 from plaques import (PICKS_FILE, PLAQUES_FILE, USER_AGENT, licence_ok, load_json,
-                     prose_matches, save_json)
+                     prose_matches, save_json, second_read_agrees)
 
 MODEL = 'claude-sonnet-5'
 CONFINED = ['--restricted', '--tools', 'Read']   # reference_claude_p_is_an_agent
@@ -162,7 +162,7 @@ def verify(rec, env):
     prose check, which compares the model only with itself, cannot see that.
     Returns (True|False, reason), or (None, reason) when the call could not be
     made, which is not a verdict."""
-    from plaques import words
+    from plaques import second_read_agrees
     with tempfile.TemporaryDirectory() as td:
         out = Path(td, 'photo.jpg')
         r = subprocess.run(['curl', '-sL', '-A', USER_AGENT, '--max-time', '90', '-o', str(out),
@@ -187,9 +187,8 @@ def verify(rec, env):
     rec['verify_text'] = a.get('text') or ''
     if not a.get('readable'):
         return False, 'second read: inscription not readable in the chosen photo'
-    first = ([rec.get('scheme_rim', '')] + rec.get('lines', []) + rec.get('extra', []))
-    first = [l for l in first if str(l).strip().lower() not in ('', 'none', 'n/a', 'null')]
-    if sorted(words(' '.join(first))) != sorted(words(a.get('text') or '')):
+    first = [rec.get('scheme_rim', '')] + rec.get('lines', []) + rec.get('extra', [])
+    if not second_read_agrees(first, rec['verify_text']):
         return False, 'second read disagrees with the first transcription'
     return True, ''
 
@@ -217,6 +216,13 @@ def main():
                 changed += 1
             rec['ok'] = ok
             rec['reason'] = '' if ok else 'prose does not match the transcription word for word'
+            if 'verify_text' in rec and rec.get('verify_reason') != 'second read: inscription not readable in the chosen photo':
+                agrees = second_read_agrees(
+                    [rec.get('scheme_rim', '')] + rec.get('lines', []) + rec.get('extra', []), rec['verify_text'])
+                if agrees != rec.get('verified'):
+                    changed += 1
+                rec['verified'] = agrees
+                rec['verify_reason'] = '' if agrees else 'second read disagrees with the first transcription'
         save_json(PICKS_FILE, picks)
         print(f'{changed} picks changed; {sum(1 for r in picks.values() if r.get("ok"))} of {len(picks)} usable.')
         return

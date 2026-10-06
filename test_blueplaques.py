@@ -146,6 +146,15 @@ class Transcription(unittest.TestCase):
     def test_scheme_only_in_the_prose_is_refused(self):
         self.assertFalse(P.prose_matches(['SITE OF', 'MOOR GATE'], 'The City of London. Site of Moor Gate.', ['']))
 
+    def test_ligatures_and_accents_fold(self):
+        self.assertEqual(P.words('Anæsthesia Hägge née'), P.words('Anaesthesia Hagge nee'))
+
+    def test_second_read_may_repeat_but_not_add(self):
+        first = ['WALTHAM FOREST HERITAGE', 'Madge Gill', 'lived here']
+        self.assertTrue(P.second_read_agrees(first, 'Waltham Forest Heritage Waltham Forest Madge Gill lived here'))
+        self.assertFalse(P.second_read_agrees(first, 'Waltham Forest Heritage Madge Gill lived here 1890'))
+        self.assertFalse(P.second_read_agrees(first, 'Waltham Forest Heritage Madge Gill'))
+
     def test_ampersand_reads_as_and(self):
         self.assertTrue(P.prose_matches(['Poet & Painter'], 'Poet and painter'))
 

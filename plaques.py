@@ -15,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+import unicodedata
 import urllib.parse
 from pathlib import Path
 
@@ -243,6 +244,11 @@ def words(s):
     """Word sequence for comparing a transcription with its prose reading:
     case, punctuation and dash style ignored."""
     s = normalise_dashes(s).lower()
+    # Ligatures and accents are how a plaque is printed, not other words:
+    # "Anæsthesia" against "Anaesthesia" split into two fragments and failed
+    # three second reads on 6 October 2026.
+    s = s.replace('æ', 'ae').replace('œ', 'oe')
+    s = ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
     s = s.replace('&', ' and ')
     # "1512–1884" read out as "1512 to 1884" is the same range, not a word
     # added: 11 of the first pre-pick's refusals were this and nothing else.
@@ -280,6 +286,23 @@ def prose_matches(lines, prose, movable=()):
                    for i in range(len(rest) - n + 1))
 
     return fits(words(prose), blocks)
+
+
+def second_read_agrees(first_lines, second_text):
+    """Does the independent second read of the chosen photo give the same
+    words as the first transcription? Order is ignored (the two reads put a
+    rim or a tablet in different places), and no word of the first may be
+    missing. The second may REPEAT a word the first already has, never add a
+    new one: on Waltham Forest's plaques the borough's name is printed round
+    the rim and again under its tree logo, and the first read took the logo
+    caption for part of the logo. 14 of 20 disagreements on 6 October 2026
+    were exactly that."""
+    from collections import Counter
+    first = [l for l in first_lines if str(l).strip().lower() not in EMPTY_LINES]
+    a, b = Counter(words(' '.join(first))), Counter(words(second_text or ''))
+    if a - b:
+        return False
+    return all(w in a for w in (b - a))
 
 
 def plaque_phrase(phrase):
