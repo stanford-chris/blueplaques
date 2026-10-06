@@ -22,6 +22,7 @@ import random
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from plaques import (PICKS_FILE, PLAQUES_FILE, STATE_FILE, USER_AGENT, build_alt, compose,
                      load_json, postable, render, save_json)
@@ -31,6 +32,10 @@ KEYCHAIN_SERVICE = 'blueplaques-bluesky'
 SHUFFLE_SEED = 18670122          # 22 January 1867: Byron's birthday, the year of the first plaque
 MAX_IMAGE_BYTES = 950_000
 SKIP_LIMIT = 25                  # plaques passed over in one run before giving up
+# Wikipedia link-card replies under each post (subjects.py), built 6 October
+# 2026 and held OFF until he has seen real ones: dry runs show them either way.
+REPLY_CARDS = False
+SUBJECTS_FILE = Path(__file__).resolve().parent / 'data' / 'subjects.json'
 
 
 def keychain_password(account, service):
@@ -166,6 +171,14 @@ def main():
     print(f'[alt] {alt}')
     print(f'[photo] {pick["file"]}')
     print(f'[plaque] {title}')
+    cards = subject_cards(plaque, pick, title)
+    for c in cards or []:
+        print(f'[reply card] {c["title"]} | {c["description"]} | {c["url"]} | '
+              f'{"Commons thumbnail" if c["thumb"] else "no image"}')
+    if cards is None:
+        print('[reply card] lookup could not be made; no replies this time')
+    if not REPLY_CARDS:
+        print('[reply card] REPLY_CARDS is off: replies would not be posted')
     if args.dry_run:
         print('\nDry run: nothing posted, no state written.')
         return
@@ -176,11 +189,52 @@ def main():
     with Image.open(io.BytesIO(image)) as im:
         ratio = models.AppBskyEmbedDefs.AspectRatio(width=im.width, height=im.height)
     client = login()
-    client.send_images(text=text_builder(parts), images=[image], image_alts=[alt],
-                       image_aspect_ratios=[ratio], langs=['en'])
+    root = client.send_images(text=text_builder(parts), images=[image], image_alts=[alt],
+                              image_aspect_ratios=[ratio], langs=['en'])
+    # Saved BEFORE the replies, as everycarnegie's poster does: a failed reply
+    # must never make the next run post the plaque again.
     state['posted'].append(title)
     save_json(STATE_FILE, state)
     print(f'Posted ({len(state["posted"])} so far).')
+    if REPLY_CARDS and cards:
+        try:
+            post_cards(client, root, cards)
+        except Exception as exc:          # the plaque is up; say so and fail the run
+            sys.exit(f'Plaque posted, but a reply card failed: {type(exc).__name__}: {exc}')
+
+
+def subject_cards(plaque, pick, title):
+    """Cards for the plaque's subjects, cached per plaque. None = the lookup
+    could not be made this time (not cached, so the next run tries again)."""
+    import subjects
+    cache = load_json(SUBJECTS_FILE, {})
+    if title in cache:
+        return cache[title]
+    cards = subjects.find(plaque, pick)
+    if cards is not None:
+        cache[title] = cards
+        save_json(SUBJECTS_FILE, cache)
+    return cards
+
+
+def post_cards(client, root, cards):
+    """One reply per subject, each replying to the one before, text empty and
+    the card carrying everything."""
+    from atproto import models
+    ref = lambda r: models.ComAtprotoRepoStrongRef.Main(uri=r.uri, cid=r.cid)
+    parent = root
+    for c in cards:
+        thumb = None
+        if c.get('thumb'):
+            r = subprocess.run(['curl', '-sL', '-A', USER_AGENT, '--max-time', '60', c['thumb']],
+                               capture_output=True)
+            if r.returncode == 0 and 2000 < len(r.stdout) <= MAX_IMAGE_BYTES:
+                thumb = client.upload_blob(r.stdout).blob
+        embed = models.AppBskyEmbedExternal.Main(external=models.AppBskyEmbedExternal.External(
+            uri=c['url'], title=c['title'], description=c['description'] or '', thumb=thumb))
+        parent = client.send_post(text='', embed=embed, langs=['en'],
+                                  reply_to=models.AppBskyFeedPost.ReplyRef(root=ref(root), parent=ref(parent)))
+        print(f'  reply card: {c["title"]}')
 
 
 if __name__ == '__main__':

@@ -214,5 +214,23 @@ class Post(unittest.TestCase):
         self.assertFalse(P.postable(plaque(CUBITT_DESC), p))
 
 
+class Subjects(unittest.TestCase):
+    def test_name_part(self):
+        import subjects as S
+        self.assertEqual(S.name_part('Category:Bertrand Russell lived here (blue plaque), Camden'), 'Bertrand Russell')
+        self.assertEqual(S.name_part('Category:Randolph Caldecott blue plaque'), 'Randolph Caldecott')
+        self.assertEqual(S.name_part('Category:Magic Circle founded here (blue plaque), Westminster'), 'Magic Circle')
+
+    def test_plurals_fold_and_stopwords_drop(self):
+        import subjects as S
+        self.assertEqual(S.significant('Huxleys'), S.significant('Huxley'))
+        self.assertEqual(S.significant('Site of St Leonard Eastcheap'), {'leonard', 'eastcheap'})
+
+    def test_plaque_years(self):
+        import subjects as S
+        self.assertEqual(S.plaque_years({'scheme_rim': '', 'lines': ['GEORGE', '1874 - 1935', 'ACTOR-MANAGER'],
+                                         'extra': []}), {1874, 1935})
+
+
 if __name__ == '__main__':
     unittest.main()
