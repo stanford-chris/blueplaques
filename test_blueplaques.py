@@ -24,7 +24,7 @@ def plaque(desc, borough='Westminster', licence='CC BY-SA 4.0', artist='Spudgun6
 
 
 def pick(**kw):
-    p = {'ok': True, 'file': 'File:X.jpg', 'scheme_rim': 'LONDON COUNTY COUNCIL',
+    p = {'ok': True, 'verified': True, 'file': 'File:X.jpg', 'scheme_rim': 'LONDON COUNTY COUNCIL',
          'lines': ['THOMAS', 'CUBITT', '1788-1855', 'Master Builder', 'lived here'], 'extra': [],
          'prose': 'London County Council. Thomas Cubitt, 1788-1855, Master Builder, lived here.',
          'plaque': 'a round blue plaque'}
@@ -119,6 +119,33 @@ class Transcription(unittest.TestCase):
         self.assertFalse(P.prose_matches(lines, 'Thomas Cubitt, 1788–1855, Builder, lived here.'))
         self.assertFalse(P.prose_matches(lines, 'Thomas Cubitt, 1788–1856, Master Builder, lived here.'))
 
+    def test_none_is_not_a_word(self):
+        self.assertTrue(P.prose_matches(['Raymond Chandler', 'lived here'], 'Raymond Chandler lived here.',
+                                        ['', 'none']))
+
+    def test_scheme_may_move_but_must_be_whole(self):
+        lines = ['SITE OF', 'FURNIVAL’S INN']
+        self.assertTrue(P.prose_matches(lines, 'The City of London. Site of Furnival’s Inn.', ['THE CITY OF LONDON']))
+        self.assertTrue(P.prose_matches(lines, 'Site of Furnival’s Inn. The City of London.', ['THE CITY OF LONDON']))
+        self.assertFalse(P.prose_matches(lines, 'Site of Furnival’s Inn.', ['THE CITY OF LONDON']))
+        self.assertFalse(P.prose_matches(lines, 'The City. Site of Furnival’s Inn.', ['THE CITY OF LONDON']))
+
+    def test_a_block_that_also_occurs_in_the_main_text(self):
+        lines = ['designer of The Glasgow School of Art', 'worked here']
+        self.assertTrue(P.prose_matches(lines, 'Designer of The Glasgow School of Art, worked here. '
+                                               'The Glasgow School of Art.', ['THE GLASGOW SCHOOL OF ART']))
+
+    def test_main_lines_must_stay_in_order(self):
+        self.assertFalse(P.prose_matches(['BORN 1608', 'DIED 1674'], 'Died 1674, born 1608.'))
+
+    def test_a_range_read_out_with_to(self):
+        self.assertTrue(P.prose_matches(['stood near here', '1512-1884'], 'Stood near here from 1512 to 1884.')
+                        is False)   # "from" is still an added word
+        self.assertTrue(P.prose_matches(['stood near here', '1512-1884'], 'Stood near here, 1512 to 1884.'))
+
+    def test_scheme_only_in_the_prose_is_refused(self):
+        self.assertFalse(P.prose_matches(['SITE OF', 'MOOR GATE'], 'The City of London. Site of Moor Gate.', ['']))
+
     def test_ampersand_reads_as_and(self):
         self.assertTrue(P.prose_matches(['Poet & Painter'], 'Poet and painter'))
 
@@ -165,6 +192,11 @@ class Post(unittest.TestCase):
         self.assertFalse(P.postable(plaque(CUBITT_DESC), pick(ok=False)))
         self.assertFalse(P.postable(plaque(CUBITT_DESC, licence='CC BY-NC 2.0'), pick()))
         self.assertFalse(P.postable(plaque(CUBITT_DESC), None))
+
+    def test_unverified_or_failed_second_read_is_not_posted(self):
+        self.assertFalse(P.postable(plaque(CUBITT_DESC), pick(verified=False)))
+        p = pick(); del p['verified']
+        self.assertFalse(P.postable(plaque(CUBITT_DESC), p))
 
 
 if __name__ == '__main__':

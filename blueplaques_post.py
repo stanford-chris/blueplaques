@@ -138,8 +138,15 @@ def main():
                 sys.exit(f'NOT POSTED: could not pick {title}: {err}')
             picks[title] = pick
             save_json(PICKS_FILE, picks)
+        if pick.get('ok') and 'verified' not in pick:
+            env = env or picker.claude_env()
+            ok, why = picker.verify(pick, env)
+            if ok is None:
+                sys.exit(f'NOT POSTED: could not verify {title}: {why}')
+            pick['verified'], pick['verify_reason'] = ok, why
+            save_json(PICKS_FILE, picks)
         if not postable(plaque, pick):
-            passed[title] = pick.get('reason') or 'not postable (credit, place or length)'
+            passed[title] = pick.get('reason') or pick.get('verify_reason') or 'not postable (credit, place or length)'
             print(f'passed over: {title[9:]} ({passed[title]})')
             skipped += 1
             if not args.dry_run:

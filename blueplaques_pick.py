@@ -134,12 +134,64 @@ def ask(plaque, files, env):
         rec.update(ok=False, file=None, reason='model found no readable photo')
         return rec, None
     rec['file'] = files[n - 1]['title']
-    every_line = ([rec['scheme_rim']] if rec['scheme_rim'] else []) + rec['lines'] + rec['extra']
-    if not rec['prose'] or not prose_matches(every_line, rec['prose']):
+    if not rec['prose'] or not prose_matches(rec['lines'], rec['prose'],
+                                             [rec['scheme_rim']] + rec['extra']):
         rec.update(ok=False, reason='prose does not match the transcription word for word')
         return rec, None
     rec.update(ok=True, reason='')
     return rec, None
+
+
+VERIFY_PROMPT = """The file photo.jpg in this directory is a photograph of a commemorative plaque. Read it.
+
+Is the plaque's full inscription clearly readable in THIS photograph alone, with the plaque large enough in the frame to read every word? Answer from this photograph only: do not use anything you know about the plaque or its subject.
+
+If it is readable, transcribe every word exactly as printed, including any scheme name around the rim and any tablet fixed beneath it. If any word cannot be read in this photograph, set "readable" to false.
+
+Reply with ONLY this JSON, no other text:
+{"readable": true|false, "text": "<every word of the inscription, as printed, or empty>"}"""
+
+
+def verify(rec, env):
+    """An independent second read: the chosen photo ALONE, transcribed afresh.
+    The pick is posted only if this agrees word for word with the first
+    transcription (order aside). Added 6 October 2026 after the first pre-pick
+    chose, for Kenneth Williams, a photo of the whole building with the plaque
+    a speck on its front: the first call saw every photo, so it could
+    transcribe the plaque from another and still pick the wrong one, and the
+    prose check, which compares the model only with itself, cannot see that.
+    Returns (True|False, reason), or (None, reason) when the call could not be
+    made, which is not a verdict."""
+    from plaques import words
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td, 'photo.jpg')
+        r = subprocess.run(['curl', '-sL', '-A', USER_AGENT, '--max-time', '90', '-o', str(out),
+                            thumb(rec['file'])], capture_output=True)
+        if r.returncode != 0 or not out.exists() or out.stat().st_size < 2000:
+            return None, f'could not fetch {rec["file"]}'
+        try:
+            r = subprocess.run(['claude', '-p', *CONFINED, '--model', MODEL, VERIFY_PROMPT],
+                               capture_output=True, text=True, cwd=td, env=env,
+                               stdin=subprocess.DEVNULL, timeout=TIMEOUT)
+        except subprocess.TimeoutExpired:
+            return None, 'model timed out'
+    if r.returncode != 0:
+        return None, f'claude exited {r.returncode}: {(r.stdout + r.stderr).strip()[:200]}'
+    m = re.search(r'\{.*\}', r.stdout, re.S)
+    try:
+        a = json.loads(m.group(0)) if m else None
+    except ValueError:
+        a = None
+    if not isinstance(a, dict):
+        return None, f'no JSON in reply: {r.stdout.strip()[:200]}'
+    rec['verify_text'] = a.get('text') or ''
+    if not a.get('readable'):
+        return False, 'second read: inscription not readable in the chosen photo'
+    first = ([rec.get('scheme_rim', '')] + rec.get('lines', []) + rec.get('extra', []))
+    first = [l for l in first if str(l).strip().lower() not in ('', 'none', 'n/a', 'null')]
+    if sorted(words(' '.join(first))) != sorted(words(a.get('text') or '')):
+        return False, 'second read disagrees with the first transcription'
+    return True, ''
 
 
 def main():
@@ -147,12 +199,66 @@ def main():
     ap.add_argument('--limit', type=int, default=0, help='stop after this many plaques')
     ap.add_argument('--only', action='append', default=[], help='one plaque category (repeatable)')
     ap.add_argument('--redo', action='store_true', help='ignore any cached pick')
+    ap.add_argument('--verify', action='store_true',
+                    help='second read of every usable pick not yet verified')
+    ap.add_argument('--recheck', action='store_true',
+                    help='re-judge every cached pick against the current word check; no model calls')
     args = ap.parse_args()
+
+    if args.recheck:
+        picks = load_json(PICKS_FILE, {})
+        changed = 0
+        for rec in picks.values():
+            if not rec.get('file') or rec.get('reason') == 'model found no readable photo':
+                continue
+            ok = bool(rec.get('prose')) and prose_matches(
+                rec.get('lines', []), rec['prose'], [rec.get('scheme_rim', '')] + rec.get('extra', []))
+            if ok != rec.get('ok'):
+                changed += 1
+            rec['ok'] = ok
+            rec['reason'] = '' if ok else 'prose does not match the transcription word for word'
+        save_json(PICKS_FILE, picks)
+        print(f'{changed} picks changed; {sum(1 for r in picks.values() if r.get("ok"))} of {len(picks)} usable.')
+        return
 
     plaques = load_json(PLAQUES_FILE, {})
     if not plaques:
         sys.exit(f'No roster at {PLAQUES_FILE}: run blueplaques_harvest.py first.')
     picks = load_json(PICKS_FILE, {})
+
+    if args.verify:
+        env = claude_env()
+        todo = [t for t, r in sorted(picks.items()) if r.get('ok') and 'verified' not in r]
+        if args.limit:
+            todo = todo[:args.limit]
+        print(f'{len(todo)} picks to verify.')
+        state = {'run': 0}
+        stop = threading.Event()
+
+        def check(title):
+            if stop.is_set():
+                return
+            ok, why = verify(picks[title], env)
+            with _lock:
+                if ok is None:
+                    state['run'] += 1
+                    print(f'  NOT CHECKED {title[9:]}: {why}')
+                    if state['run'] >= 3:
+                        stop.set()
+                    return
+                state['run'] = 0
+                picks[title]['verified'] = ok
+                picks[title]['verify_reason'] = why
+                save_json(PICKS_FILE, picks)
+                print(f'  {"ok " if ok else "NO "} {title[9:]}' + ('' if ok else f' ({why})'))
+
+        with cf.ThreadPoolExecutor(WORKERS) as ex:
+            list(ex.map(check, todo))
+        v = [r for r in picks.values() if 'verified' in r]
+        print(f'{sum(1 for r in v if r["verified"])} of {len(v)} verified picks agree.')
+        if stop.is_set():
+            sys.exit('Stopped after three failures in a row: check the token and the quota.')
+        return
 
     todo = []
     for title in (args.only or sorted(plaques)):

@@ -244,14 +244,42 @@ def words(s):
     case, punctuation and dash style ignored."""
     s = normalise_dashes(s).lower()
     s = s.replace('&', ' and ')
+    # "1512–1884" read out as "1512 to 1884" is the same range, not a word
+    # added: 11 of the first pre-pick's refusals were this and nothing else.
+    s = re.sub(r'(?<=\d)\s+to\s+(?=\d)', ' ', s)
     return re.findall(r'[a-z0-9]+', s)
 
 
-def prose_matches(lines, prose):
+EMPTY_LINES = {'', 'none', 'n/a', 'null'}
+
+
+def prose_matches(lines, prose, movable=()):
     """The guard on the model's prose reading: it must contain exactly the
-    transcribed words, in order, and nothing else. Recasing and punctuation
-    are what the prose is for; an added or dropped word is a refusal."""
-    return words(' '.join(lines)) == words(prose)
+    transcribed words and nothing else. Recasing and punctuation are what the
+    prose is for; an added or dropped word is a refusal.
+
+    `lines` (the main inscription) must appear in order. Each of `movable`
+    (the scheme on the rim, an extra tablet) must appear once, whole, but may
+    sit anywhere: the model reads a scheme where it is printed, often at the
+    bottom, and puts it first in the prose, or the reverse. About 20 of the
+    first pre-pick's 100 refusals were only that. A line reading "none" is the
+    model saying there was nothing there, never an inscription word: 54 of the
+    100 were that, which was this function's fault, not the model's."""
+    keep = lambda ls: [l for l in ls if str(l).strip().lower() not in EMPTY_LINES]
+    main = words(' '.join(keep(lines)))
+    blocks = [b for b in (words(x) for x in keep(movable)) if b]
+
+    def fits(rest, blocks):
+        # A short block can also occur INSIDE the main inscription ("Sir Roger
+        # Bannister" on the plaque and on its tablet), so every occurrence is
+        # tried, not just the first: removing the wrong one reads as a refusal.
+        if not blocks:
+            return rest == main
+        b, n = blocks[0], len(blocks[0])
+        return any(rest[i:i + n] == b and fits(rest[:i] + rest[i + n:], blocks[1:])
+                   for i in range(len(rest) - n + 1))
+
+    return fits(words(prose), blocks)
 
 
 def plaque_phrase(phrase):
@@ -344,9 +372,10 @@ def render(parts):
 
 def postable(plaque, pick):
     """A plaque goes out only with a readable pick whose prose passed the
-    word check, on a photo we can license, and with something to say where
+    word check and whose chosen photo, read again alone, gave the same words
+    (`verified`), on a photo we can license, and with something to say where
     it is."""
-    if not pick or not pick.get('ok'):
+    if not pick or not pick.get('ok') or pick.get('verified') is not True:
         return False
     files = {f['title']: f for f in plaque.get('files', [])}
     photo = files.get(pick.get('file'))
