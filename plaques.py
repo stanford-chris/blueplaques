@@ -393,12 +393,29 @@ def render(parts):
     return ''.join(text for _, text, _ in parts)
 
 
+# Plaques that belong to no scheme: Commons files some under "fake blue
+# plaque" (Phileas Fogg, Canaletto, a DJ's studio) and calls others
+# "unofficial" (Rik Mayall in Hammersmith). Left out, his call on 6 October
+# 2026: the bio says "from every scheme", and a joke plaque presented like a
+# real one is the one post here that could mislead. Matched on the phrase,
+# not the word, so "This is not a fake or composite" (Orwell) passes.
+NOT_A_SCHEME = re.compile(r'\b(fake|unofficial|spoof|joke)\s+(blue\s+)?plaques?\b', re.I)
+
+
+def unofficial(plaque):
+    text = ' '.join([plaque.get('title', '')] + [f.get('title', '') + ' ' + f.get('description', '')
+                                                  for f in plaque.get('files', [])])
+    return bool(NOT_A_SCHEME.search(text))
+
+
 def postable(plaque, pick):
     """A plaque goes out only with a readable pick whose prose passed the
     word check and whose chosen photo, read again alone, gave the same words
     (`verified`), on a photo we can license, and with something to say where
     it is."""
     if not pick or not pick.get('ok') or pick.get('verified') is not True:
+        return False
+    if unofficial(plaque):
         return False
     files = {f['title']: f for f in plaque.get('files', [])}
     photo = files.get(pick.get('file'))

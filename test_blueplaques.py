@@ -202,6 +202,12 @@ class Post(unittest.TestCase):
         self.assertFalse(P.postable(plaque(CUBITT_DESC, licence='CC BY-NC 2.0'), pick()))
         self.assertFalse(P.postable(plaque(CUBITT_DESC), None))
 
+    def test_fake_and_unofficial_plaques_are_left_out(self):
+        p = plaque(CUBITT_DESC); p['title'] = 'Category:Phileas Fogg (fake blue plaque), Westminster'
+        self.assertFalse(P.postable(p, pick()))
+        p = plaque('Unofficial blue plaque in tribute to Rik Mayall'); self.assertFalse(P.postable(p, pick()))
+        p = plaque(CUBITT_DESC + '. This is not a fake or composite.'); self.assertTrue(P.postable(p, pick()))
+
     def test_unverified_or_failed_second_read_is_not_posted(self):
         self.assertFalse(P.postable(plaque(CUBITT_DESC), pick(verified=False)))
         p = pick(); del p['verified']
