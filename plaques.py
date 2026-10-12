@@ -147,13 +147,31 @@ def clean_address(where):
     becomes '3 Lyall Street, Belgravia, SW1X 8DW'. 'London' goes because the
     account is London's, the borough goes because it is the third hashtag,
     and anything after the postcode goes because it is always one of those."""
+    where = where.strip()
+    # A caption with no 'erected' sentence leads with its own preamble: "The
+    # English Heritage blue plaque for Edward R. Murrow at Weymouth House, ...".
+    # Keep what follows the last ' at ' in the first chunk.
+    first = where.split(',', 1)[0]
+    if ' at ' in first:
+        where = where[first.rindex(' at ') + 4:]
+    # Text after the postcode is the photographer's caption ("W9 1ER. Alan
+    # Turing Code Breaker ..."), never address.
+    pc = POSTCODE.search(where)
+    if pc:
+        where = where[:pc.end()]
+        # "... Lucky Horseshoe Café. 184 Shaftesbury Avenue": a sentence before
+        # the address goes. Three letters before the stop, so "St. John" stays.
+        where = re.split(r'(?<=\w{3})\.\s+(?=[A-Z\d])', where)[-1]
     parts = [p.strip() for p in where.split(',') if p.strip()]
     out = []
     for p in parts:
         if BOROUGH_SUFFIXES.match(p):
             continue
-        p = re.sub(r'^London\s+(?=[A-Z]{1,2}\d)', '', p)   # "London SW1X 8DW"
-        if p.lower() == 'london':
+        # "London SW1X 8DW", "54 Frith Street London W1D 4SN", "Liverpool Street
+        # London": London (or the City of London) ending a chunk or sitting
+        # before a postcode. "University of London" is a name and stays.
+        p = re.sub(r'(?:^|\s+)(?:City of |(?<!\bof ))London(?=\s+[A-Z]{1,2}\d|$)', '', p).strip()
+        if not p:
             continue
         pc = POSTCODE.search(p)
         if pc:

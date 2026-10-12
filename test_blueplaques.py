@@ -66,6 +66,23 @@ class Descriptions(unittest.TestCase):
                             'Pioneer of Computer Science Love Lived Here 1912-1954'),
             '2 Warrington Crescent W9 1ER')
 
+    def test_leading_caption_is_dropped(self):
+        self.assertEqual(
+            P.clean_address('The English Heritage blue plaque for Edward R. Murrow at Weymouth '
+                            'House, 84-94 Hallam Street, Fitzrovia, W1W 5HF in the City of Westminster.'),
+            'Weymouth House, 84-94 Hallam Street, Fitzrovia, W1W 5HF')
+        self.assertEqual(
+            P.clean_address('Blue plaque unveiled at the basement of Wildwood, formerly the Lucky '
+                            'Horseshoe Café. 184 Shaftesbury Avenue London WC2 8JB on 3rd August 2018'),
+            '184 Shaftesbury Avenue WC2 8JB')
+
+    def test_london_before_postcode_goes_but_not_in_a_name(self):
+        self.assertEqual(P.clean_address('54 Frith Street London W1D 4SN. Dr. John Snow'),
+                         '54 Frith Street W1D 4SN')
+        self.assertEqual(P.clean_address('72 Moorgate City of London EC2M 6SE'), '72 Moorgate EC2M 6SE')
+        self.assertEqual(P.clean_address('Senate House, University of London, WC1E 7HU'),
+                         'Senate House, University of London, WC1E 7HU')
+
     def test_unstructured_description_gives_nothing(self):
         self.assertEqual(P.parse_description('Blue plaque dedicated to Thomas Cubitt.'), {})
 
