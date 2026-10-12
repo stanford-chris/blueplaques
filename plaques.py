@@ -155,9 +155,13 @@ def clean_address(where):
         p = re.sub(r'^London\s+(?=[A-Z]{1,2}\d)', '', p)   # "London SW1X 8DW"
         if p.lower() == 'london':
             continue
-        out.append(p)
-        if POSTCODE.search(p):
+        pc = POSTCODE.search(p)
+        if pc:
+            # Text after the postcode in the same chunk is the photographer's
+            # caption ("W9 1ER. Alan Turing Code Breaker ..."), never address.
+            out.append(p[:pc.end()])
             break
+        out.append(p)
     return ', '.join(out)
 
 

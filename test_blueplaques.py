@@ -59,6 +59,13 @@ class Descriptions(unittest.TestCase):
         self.assertEqual(d['when'], '21 May 2014')
         self.assertEqual(d['address'], '32 Tavistock Place, WC1H 9RH')
 
+    def test_caption_after_postcode_is_dropped(self):
+        # Turing, posted 12 October 2026 with the caption still on the address.
+        self.assertEqual(
+            P.clean_address('2 Warrington Crescent W9 1ER. Alan Turing Code Breaker & '
+                            'Pioneer of Computer Science Love Lived Here 1912-1954'),
+            '2 Warrington Crescent W9 1ER')
+
     def test_unstructured_description_gives_nothing(self):
         self.assertEqual(P.parse_description('Blue plaque dedicated to Thomas Cubitt.'), {})
 
