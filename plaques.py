@@ -154,6 +154,15 @@ def clean_address(where):
     first = where.split(',', 1)[0]
     if ' at ' in first:
         where = where[first.rindex(' at ') + 4:]
+    else:
+        # "Edward Westermarck blue plaque on Senate House, ..."
+        on = re.search(r'\bplaque on\s+', first, re.I)
+        if on:
+            where = where[on.end():]
+    # "the the Bank Junction end of Princes Street": a doubled word, and the
+    # first letter capitalised once the preamble is gone.
+    where = re.sub(r'\b(\w+)\s+\1\b', r'\1', where, flags=re.I)
+    where = where[:1].upper() + where[1:]
     # Text after the postcode is the photographer's caption ("W9 1ER. Alan
     # Turing Code Breaker ..."), never address.
     pc = POSTCODE.search(where)
@@ -167,6 +176,10 @@ def clean_address(where):
     for p in parts:
         if BOROUGH_SUFFIXES.match(p):
             continue
+        # "SW10 on 3rd July 1973", "London in 1981": the unveiling date, left
+        # behind when the postcode is only a district and nothing cut it off.
+        p = re.sub(r'\s+(?:on|in)\s+(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:' + MONTHS
+                   + r')\s+)?\d{4}$', '', p)
         # "London SW1X 8DW", "54 Frith Street London W1D 4SN", "Liverpool Street
         # London": London (or the City of London) ending a chunk or sitting
         # before a postcode. "University of London" is a name and stays.
@@ -233,7 +246,9 @@ def best_details(files, picked_title):
         for f in order:
             t = strip_html(f.get('description', ''))
             if POSTCODE.search(t) and len(t) < 160 and ' erected ' not in f' {t} ':
-                tail = re.split(r'\s+-\s+', t)[-1]
+                # "Title - 14 Soho Square", or "21 Cromwell Road, SW7 2JB -
+                # location of blue plaque": the piece that holds the postcode.
+                tail = next(x for x in re.split(r'\s+-\s+', t) if POSTCODE.search(x))
                 found['address'] = clean_address(tail)
                 break
     return found

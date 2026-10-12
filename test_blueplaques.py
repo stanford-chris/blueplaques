@@ -83,6 +83,26 @@ class Descriptions(unittest.TestCase):
         self.assertEqual(P.clean_address('Senate House, University of London, WC1E 7HU'),
                          'Senate House, University of London, WC1E 7HU')
 
+    def test_plaque_on_preamble_date_and_doubled_word(self):
+        self.assertEqual(
+            P.clean_address('Edward Westermarck blue plaque on Senate House, University of London, '
+                            'London WC1E 7HU'),
+            'Senate House, University of London, WC1E 7HU')
+        self.assertEqual(P.clean_address('19 Park Crescent, Regents Park, London in 1981'),
+                         '19 Park Crescent, Regents Park')
+        self.assertEqual(
+            P.clean_address('104 Cheyne Walk, Kensington and Chelsea, SW10 on 3rd July 1973'),
+            '104 Cheyne Walk, Kensington and Chelsea, SW10')
+        self.assertEqual(
+            P.clean_address('the the Bank Junction end of Princes Street London EC2'),
+            'The Bank Junction end of Princes Street EC2')
+
+    def test_fallback_keeps_the_piece_with_the_postcode(self):
+        files = [{'title': 'File:a.jpg',
+                  'description': '21 Cromwell Road, South Kensington, SW7 2JB - location of blue plaque'}]
+        self.assertEqual(P.best_details(files, 'File:a.jpg')['address'],
+                         '21 Cromwell Road, South Kensington, SW7 2JB')
+
     def test_unstructured_description_gives_nothing(self):
         self.assertEqual(P.parse_description('Blue plaque dedicated to Thomas Cubitt.'), {})
 
